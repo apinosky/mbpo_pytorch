@@ -20,6 +20,7 @@ test_labels_file_path = './MNIST_data/t10k-labels-idx1-ubyte.gz'
 
 BATCH_SIZE = 100
 
+import logger
 
 class StandardScaler(object):
     def __init__(self):
@@ -114,28 +115,30 @@ class EnsembleModel(nn.Module):
     def __init__(self, state_size, action_size, reward_size, ensemble_size, hidden_size=200, learning_rate=1e-3, use_decay=False):
         super(EnsembleModel, self).__init__()
         self.hidden_size = hidden_size
-        self.nn1 = EnsembleFC(state_size + action_size, hidden_size, ensemble_size, weight_decay=0.000025)
-        self.nn2 = EnsembleFC(hidden_size, hidden_size, ensemble_size, weight_decay=0.00005)
-        self.nn3 = EnsembleFC(hidden_size, hidden_size, ensemble_size, weight_decay=0.000075)
-        self.nn4 = EnsembleFC(hidden_size, hidden_size, ensemble_size, weight_decay=0.000075)
+        # 4 layers and weight decay >> 2 layers and no decay
+        self.nn1 = EnsembleFC(state_size + action_size, hidden_size, ensemble_size)#, weight_decay=0.000025)
+        self.nn2 = EnsembleFC(hidden_size, hidden_size, ensemble_size)#, weight_decay=0.00005)
+        # self.nn3 = EnsembleFC(hidden_size, hidden_size, ensemble_size, weight_decay=0.000075)
+        # self.nn4 = EnsembleFC(hidden_size, hidden_size, ensemble_size, weight_decay=0.000075)
         self.use_decay = use_decay
 
         self.output_dim = state_size + reward_size
         # Add variance output
-        self.nn5 = EnsembleFC(hidden_size, self.output_dim * 2, ensemble_size, weight_decay=0.0001)
+        self.nn5 = EnsembleFC(hidden_size, self.output_dim * 2, ensemble_size)#, weight_decay=0.0001)
 
         self.max_logvar = nn.Parameter((torch.ones((1, self.output_dim)).float() / 2).to(device), requires_grad=False)
         self.min_logvar = nn.Parameter((-torch.ones((1, self.output_dim)).float() * 10).to(device), requires_grad=False)
         self.optimizer = torch.optim.Adam(self.parameters(), lr=learning_rate)
         self.apply(init_weights)
-        self.swish = Swish()
+        self.AF = nn.ReLU() # Swish()
 
     def forward(self, x, ret_log_var=False):
-        nn1_output = self.swish(self.nn1(x))
-        nn2_output = self.swish(self.nn2(nn1_output))
-        nn3_output = self.swish(self.nn3(nn2_output))
-        nn4_output = self.swish(self.nn4(nn3_output))
-        nn5_output = self.nn5(nn4_output)
+        nn1_output = self.AF(self.nn1(x))
+        nn2_output = self.AF(self.nn2(nn1_output))
+        # nn3_output = self.AF(self.nn3(nn2_output))
+        # nn4_output = self.AF(self.nn4(nn3_output))
+        # nn5_output = self.nn5(nn4_output)
+        nn5_output = self.nn5(nn2_output)
 
         mean = nn5_output[:, :, :self.output_dim]
 
@@ -200,7 +203,7 @@ class EnsembleDynamicsModel():
         self.ensemble_model = EnsembleModel(state_size, action_size, reward_size, network_size, hidden_size, use_decay=use_decay)
         self.scaler = StandardScaler()
 
-    def train(self, inputs, labels, batch_size=256, holdout_ratio=0., max_epochs_since_update=5):
+    def train(self, inputs, labels, batch_size=128, holdout_ratio=0., max_epochs_since_update=5):
         self._max_epochs_since_update = max_epochs_since_update
         self._epochs_since_update = 0
         self._state = {}
@@ -245,7 +248,7 @@ class EnsembleDynamicsModel():
                 break_train = self._save_best(epoch, holdout_mse_losses)
                 if break_train:
                     break
-            print('epoch: {}, holdout mse losses: {}'.format(epoch, holdout_mse_losses))
+            logger.debug('epoch: {}, holdout mse losses: {}'.format(epoch, holdout_mse_losses))
 
     def _save_best(self, epoch, holdout_losses):
         updated = False

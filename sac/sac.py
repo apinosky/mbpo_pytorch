@@ -5,7 +5,6 @@ from torch.optim import Adam
 from sac.utils import  soft_update, hard_update
 from sac.model import GaussianPolicy, QNetwork, DeterministicPolicy
 
-
 class SAC(object):
     def __init__(self, num_inputs, action_space, args):
         torch.autograd.set_detect_anomaly(True)
@@ -17,10 +16,14 @@ class SAC(object):
         self.target_update_interval = args.target_update_interval
         self.automatic_entropy_tuning = args.automatic_entropy_tuning
 
-        self.device = torch.device("cuda")
+        if args.cuda:
+            self.device = torch.device("cuda")
+            print('SAC using GPU')
+        else:
+            self.device = torch.device("cpu")
 
         self.critic = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(device=self.device)
-        self.critic_optim = Adam(self.critic.parameters(), lr=args.lr)
+        self.critic_optim = Adam(self.critic.parameters(), lr=args.critic_lr)
 
         self.critic_target = QNetwork(num_inputs, action_space.shape[0], args.hidden_size).to(self.device)
         hard_update(self.critic_target, self.critic)

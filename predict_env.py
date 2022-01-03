@@ -22,6 +22,12 @@ class PredictEnv:
             done = ~not_done
             done = done[:, None]
             return done
+        elif env_name == "HalfCheetah-v2":
+            assert len(obs.shape) == len(next_obs.shape) == len(act.shape) == 2
+
+            done = np.array([False]).repeat(len(obs))
+            done = done[:,None]
+            return done
         elif env_name == "Walker2d-v2":
             assert len(obs.shape) == len(next_obs.shape) == len(act.shape) == 2
 
@@ -101,10 +107,13 @@ class PredictEnv:
         log_prob, dev = self._get_logprob(samples, ensemble_model_means, ensemble_model_vars)
 
         rewards, next_obs = samples[:, :1], samples[:, 1:]
-        terminals = self._termination_fn(self.env_name, obs, act, next_obs)
+        # terminals = self._termination_fn(self.env_name, obs, act, next_obs)
+        # print('terminals_fun',terminals.shape)
+        terminals = None
 
         batch_size = model_means.shape[0]
-        return_means = np.concatenate((model_means[:, :1], terminals, model_means[:, 1:]), axis=-1)
+        # return_means = np.concatenate((model_means[:, :1], terminals, model_means[:, 1:]), axis=-1)
+        return_means = np.concatenate((model_means[:, :1], np.zeros((batch_size, 1)), model_means[:, 1:]), axis=-1)
         return_stds = np.concatenate((model_stds[:, :1], np.zeros((batch_size, 1)), model_stds[:, 1:]), axis=-1)
 
         if return_single:
@@ -112,7 +121,7 @@ class PredictEnv:
             return_means = return_means[0]
             return_stds = return_stds[0]
             rewards = rewards[0]
-            terminals = terminals[0]
+            terminals = terminals #[0]
 
         info = {'mean': return_means, 'std': return_stds, 'log_prob': log_prob, 'dev': dev}
         return next_obs, rewards, terminals, info

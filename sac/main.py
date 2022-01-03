@@ -137,4 +137,3 @@ for i_episode in itertools.count(1):
         print("----------------------------------------")
 
 env.close()
-
